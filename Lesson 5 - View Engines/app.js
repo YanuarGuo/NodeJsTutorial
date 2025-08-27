@@ -39,7 +39,7 @@ app.get("/blogs/create", (req, res) => {
 // app.get("/about-us", (req, res) => {
 //   res.redirect("/about");
 // });
-
+//
 //default
 app.use((req, res) => {
   res.status(404).render("404", { title: "404" });
