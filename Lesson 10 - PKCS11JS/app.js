@@ -29,6 +29,10 @@ try {
   var info = pkcs11.C_GetSessionInfo(session);
   pkcs11.C_Login(session, 1, "648219");
 
+  var sessionInfo = pkcs11.C_GetSessionInfo(session);
+  console.log(sessionInfo.slotID);
+  console.log(sessionInfo.state);
+
   pkcs11.C_Logout(session);
   pkcs11.C_CloseSession(session);
 } catch (err) {
