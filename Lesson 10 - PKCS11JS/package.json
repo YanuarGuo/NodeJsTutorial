@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "graphene-pk11": "^2.3.6",
     "pkcs11js": "^2.1.6"
   }
 }
