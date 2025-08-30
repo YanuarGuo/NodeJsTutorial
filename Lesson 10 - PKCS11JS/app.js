@@ -1,193 +1,91 @@
-const graphene = require("graphene-pk11");
-var Module = graphene.Module;
+var pkcs11js = require("pkcs11js");
+var pkcs11 = new pkcs11js.PKCS11();
 
 // NOTE: USE x64 LIBRARY
-var mod = Module.load("D:\\SoftHSM2\\lib\\softhsm2-x64.dll", "OpenSC");
-mod.initialize();
+pkcs11.load("D:\\SoftHSM2\\lib\\softhsm2-x64.dll", "OpenSC");
+pkcs11.C_Initialize();
 
 try {
-  // region GET MECHANISMS
-  // try {
-  //   var slots = mod.getSlots(true);
-  //   if (slots.length > 0) {
-  //     for (var i = 0; i < slots.length; i++) {
-  //       var slot = slots.items(i);
-  //       console.log("Slot #" + slot.handle);
-  //       console.log("\tDescription:", slot.slotDescription);
-  //       console.log("\tSerial:", slot.getToken().serialNumber);
-  //       console.log(
-  //         "\tPassword(min/max): %d/%d",
-  //         slot.getToken().minPinLen,
-  //         slot.getToken().maxPinLen
-  //       );
-  //       console.log(
-  //         "\tIs hardware:",
-  //         !!(slot.flags & graphene.SlotFlag.HW_SLOT)
-  //       );
-  //       console.log(
-  //         "\tIs removable:",
-  //         !!(slot.flags & graphene.SlotFlag.REMOVABLE_DEVICE)
-  //       );
-  //       console.log(
-  //         "\tIs initialized:",
-  //         !!(slot.flags & graphene.SlotFlag.TOKEN_PRESENT)
-  //       );
-  //       console.log("\n\nMechanisms:");
-  //       console.log("Name                       h/s/v/e/d/w/u");
-  //       console.log("========================================");
-  //       function b(v) {
-  //         return v ? "+" : "-";
-  //       }
+  var module_info = pkcs11.C_GetInfo();
 
-  //       function s(v) {
-  //         v = v.toString();
-  //         for (var i_1 = v.length; i_1 < 27; i_1++) {
-  //           v += " ";
-  //         }
-  //         return v;
-  //       }
+  var slots = pkcs11.C_GetSlotList(true);
+  var slot = slots[0];
 
-  //       var mechs = slot.getMechanisms();
-  //       for (var j = 0; j < mechs.length; j++) {
-  //         var mech = mechs.items(j);
-  //         console.log(
-  //           s(mech.name) +
-  //             b(mech.flags & graphene.MechanismFlag.DIGEST) +
-  //             "/" +
-  //             b(mech.flags & graphene.MechanismFlag.SIGN) +
-  //             "/" +
-  //             b(mech.flags & graphene.MechanismFlag.VERIFY) +
-  //             "/" +
-  //             b(mech.flags & graphene.MechanismFlag.ENCRYPT) +
-  //             "/" +
-  //             b(mech.flags & graphene.MechanismFlag.DECRYPT) +
-  //             "/" +
-  //             b(mech.flags & graphene.MechanismFlag.WRAP) +
-  //             "/" +
-  //             b(mech.flags & graphene.MechanismFlag.UNWRAP)
-  //         );
-  //       }
-  //     }
-  //   }
-  // } catch (err) {
-  //   console.error(err);
-  // }
+  var slot_info = pkcs11.C_GetSlotInfo(slot);
+  var token_info = pkcs11.C_GetTokenInfo(slot);
 
-  // region HASHING
-  // try {
-  //   var slot = mod.getSlots(0);
-  //   if (slot.flags & graphene.SlotFlag.TOKEN_PRESENT) {
-  //     var session = slot.open();
-  //     var digest = session.createDigest("sha1");
+  var mechs = pkcs11.C_GetMechanismList(slot);
+  var mech_info = pkcs11.C_GetMechanismInfo(slot, mechs[0]);
 
-  //     // digest.update -> to input plain text buffer and can be concat to the next update
-  //     digest.update("YANUAR");
-  //     var hash = digest.final();
-  //     console.log("Hash SHA1:", hash.toString("hex"));
-  //     session.close();
-  //   } else {
-  //     console.error("Slot is not initialized");
-  //   }
-  // } catch (err) {
-  //   console.error(err);
-  // }
+  var session = pkcs11.C_OpenSession(
+    slot,
+    pkcs11js.CKF_RW_SESSION | pkcs11js.CKF_SERIAL_SESSION
+  );
 
-  // region GENERATING KEY
-  // try {
-  //   var slot = mod.getSlots(0);
-  //   if (slot.flags & graphene.SlotFlag.TOKEN_PRESENT) {
-  //     var session = slot.open();
-  //     session.login("147258");
+  var info = pkcs11.C_GetSessionInfo(session);
+  pkcs11.C_Login(session, 1, "147258");
 
-  //     var k = session.generateKey(graphene.KeyGenMechanism.AES, {
-  //       class: graphene.ObjectClass.SECRET_KEY,
-  //       token: false,
-  //       valueLen: 256 / 8,
-  //       keyType: graphene.KeyType.AES,
-  //       label: "My AES secret key",
-  //       private: true,
-  //     });
+  var publicKeyTemplate = [
+    { type: pkcs11js.CKA_CLASS, value: pkcs11js.CKO_PUBLIC_KEY },
+    { type: pkcs11js.CKA_TOKEN, value: true },
+    { type: pkcs11js.CKA_LABEL, value: "My RSA Public Key" },
+    { type: pkcs11js.CKA_PUBLIC_EXPONENT, value: new Buffer.from([1, 0, 1]) },
+    { type: pkcs11js.CKA_MODULUS_BITS, value: 2048 },
+    { type: pkcs11js.CKA_VERIFY, value: true },
+    { type: pkcs11js.CKA_ENCRYPT, value: true },
+  ];
+  var privateKeyTemplate = [
+    { type: pkcs11js.CKA_CLASS, value: pkcs11js.CKO_PRIVATE_KEY },
+    { type: pkcs11js.CKA_TOKEN, value: true },
+    { type: pkcs11js.CKA_LABEL, value: "My RSA Private Key" },
+    { type: pkcs11js.CKA_SIGN, value: true },
+    { type: pkcs11js.CKA_DECRYPT, value: true },
+  ];
+  var keys = pkcs11.C_GenerateKeyPair(
+    session,
+    { mechanism: pkcs11js.CKM_RSA_PKCS_KEY_PAIR_GEN },
+    publicKeyTemplate,
+    privateKeyTemplate
+  );
 
-  //     console.log("Key.handle:", k.handle); // Key.handle: 2
-  //     console.log("Key.type:", graphene.KeyType[k.type]); // Key.type: AES
+  console.log("key generated");
 
-  //     session.logout();
-  //     session.close();
-  //   } else {
-  //     console.error("Slot is not initialized");
-  //   }
-  // } catch (err) {
-  //   console.error(err);
-  // }
+  // var cbc_param = pkcs11.C_GenerateRandom(new Buffer.from(16));
 
-  // region SIGN / VERIFY
-  // try {
-  //   var slot = mod.getSlots(0);
-  //   if (slot.flags & graphene.SlotFlag.TOKEN_PRESENT) {
-  //     var session = slot.open(
-  //       graphene.SessionFlag.RW_SESSION | graphene.SessionFlag.SERIAL_SESSION
-  //     );
-  //     session.login("147258");
+  pkcs11.C_EncryptInit(
+    session,
+    {
+      mechanism: pkcs11js.CKM_RSA_PKCS,
+      // parameter: cbc_param,
+    },
+    keys.publicKey
+  );
 
-  //     // generate RSA key pair
-  //     var keys = session.generateKeyPair(
-  //       graphene.KeyGenMechanism.RSA,
-  //       {
-  //         //public
-  //         keyType: graphene.KeyType.RSA,
-  //         modulusBits: 1024,
-  //         publicExponent: Buffer.from([3]),
-  //         token: true,
-  //         verify: true,
-  //         encrypt: true,
-  //         wrap: true,
-  //         label: "testPub",
-  //       },
-  //       {
-  //         //private
-  //         keyType: graphene.KeyType.RSA,
-  //         token: true,
-  //         sign: true,
-  //         decrypt: true,
-  //         unwrap: true,
-  //         label: "testPriv",
-  //       }
-  //     );
+  console.log("encrypt initialized");
 
-  //     // sign content
-  //     for (let i = 1; i <= 5; i++) {
-  //       console.time();
-  //       var sign = session.createSign("SHA512_RSA_PKCS", keys.privateKey);
-  //       sign.update(
-  //         "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa nisl malesuada lacinia integer nunc posuere ut hendrerit semper vel class aptent taciti sociosqu ad litora torquent per conubia nostra inceptos himenaeos orci varius natoque penatibus et magnis dis parturient montes nascetur ridiculus12"
-  //       );
-  //       var signature = sign.final();
-  //       console.timeEnd();
-  //       // console.log("Signature RSA-SHA1:", signature.toString("hex")); // Signature RSA-SHA1: 6102a66dc0d97fadb5...
-  //     }
+  var enc = new Buffer(0);
+  enc = Buffer.concat([
+    enc,
+    pkcs11.C_EncryptUpdate(
+      session,
+      new Buffer("Incoming data 1"),
+      new Buffer(16)
+    ),
+  ]);
 
-  //     // verify content
-  //     for (let i = 1; i <= 5; i++) {
-  //       console.time();
-  //       var verify = session.createVerify("SHA512_RSA_PKCS", keys.publicKey);
-  //       verify.update(
-  //         "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa nisl malesuada lacinia integer nunc posuere ut hendrerit semper vel class aptent taciti sociosqu ad litora torquent per conubia nostra inceptos himenaeos orci varius natoque penatibus et magnis dis parturient montes nascetur ridiculus12"
-  //       );
-  //       var verify_result = verify.final(signature);
-  //       console.timeEnd();
-  //       console.log("Signature RSA-SHA1 verify:", verify_result); // Signature RSA-SHA1 verify: true
-  //     }
+  console.log("message added");
 
-  //     session.logout();
-  //     session.close();
-  //   } else {
-  //     console.error("Slot is not initialized");
-  //   }
-  // } catch (err) {
-  //   console.error(err);
-  // }
+  enc = Buffer.concat([
+    enc,
+    pkcs11.C_EncryptFinal(session, new Buffer.from(16)),
+  ]);
 
-  mod.finalize();
+  console.log(enc.toString("hex"));
+
+  pkcs11.C_Logout(session);
+  pkcs11.C_CloseSession(session);
+
+  pkcs11.C_Finalize;
 } catch (err) {
   console.error(err);
 }

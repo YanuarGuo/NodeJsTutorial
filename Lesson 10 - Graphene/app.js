@@ -1,10 +1,13 @@
 const fs = require("fs");
 const forge = require("node-forge");
 const graphene = require("graphene-pk11");
+const pkcs11 = require("pkcs11js");
 const { token } = require("morgan");
+const { sign, verify } = require("crypto");
 
-const HSM_PKCS11_LIB_FILE = "D:\\SoftHSM2\\lib\\softhsm2-x64.dll";
-const HSM_PKCS11_LIB_NAME = "SoftHSM";
+const HSM_PKCS11_LIB_FILE =
+  "C:\\Program Files\\SafeNet\\Protect Toolkit C SDK\\bin\\sw\\cryptoki.dll";
+const HSM_PKCS11_LIB_NAME = "SafeNet";
 const HSM_LOGIN_PIN = "147258";
 
 const UNSAFE_USE_LOCAL_OAEP = false;
@@ -12,36 +15,88 @@ const USE_SAFENET = false;
 
 function hsmCreateAesKey(session, label, id, valueLen) {
   return session.generateKey(graphene.KeyGenMechanism.AES, {
-    token: true,
+    token: false,
     valueLen,
     keyType: graphene.KeyType.AES,
     extractable: true,
     wrap: true,
     encrypt: true,
+    decrypt: true,
     label,
     id,
   });
 }
 
-function hsmCreateRsaKey(session, label, id) {
+function hsmCreateDesKey(session, label, id, valueLen) {
+  return session.generateKey(graphene.MechanismEnum.DES3_KEY_GEN, {
+    token: false,
+    valueLen,
+    keyType: graphene.KeyType.DES3,
+    extractable: true,
+    wrap: true,
+    encrypt: true,
+    decrypt: true,
+    label,
+    id,
+  });
+}
+
+function hsmCreateRsaKey(session, label, id, size) {
   return session.generateKeyPair(
     graphene.KeyGenMechanism.RSA,
     {
       keyType: graphene.KeyType.RSA,
-      modulusBits: 4096,
+      modulusBits: size,
       publicExponent: Buffer.from([0x01, 0x00, 0x01]),
-      token: true,
+      token: false,
       label,
       id,
     },
     {
       keyType: graphene.KeyType.RSA,
       extractable: true,
-      token: true,
+      token: false,
       label,
       id,
     }
   );
+}
+
+function hsmCreateEC(session, label, id) {
+  return session.generateKeyPair(
+    graphene.KeyGenMechanism.ECDSA,
+    {
+      keyType: graphene.KeyType.ECDSA,
+      token: false,
+      verify: true,
+      paramsECDSA: graphene.NamedCurve.getByName("secp521r1").value,
+      label,
+      id,
+    },
+    {
+      keyType: graphene.KeyType.ECDSA,
+      token: false,
+      sign: true,
+      label,
+      id,
+    }
+  );
+}
+
+function hsmCreateGenericSecretKey(session, label, id, valueLen) {
+  return session.generateKey(graphene.KeyGenMechanism.GENERIC_SECRET, {
+    token: true,
+    valueLen,
+    keyType: graphene.KeyType.GENERIC_SECRET,
+    extractable: true,
+    wrap: true,
+    encrypt: true,
+    decrypt: true,
+    sign: true,
+    verify: true,
+    label,
+    id,
+  });
 }
 
 function hsmWrapRsaKey(session, aesKey, rsaKey) {
@@ -87,27 +142,29 @@ function hsmWrapAesKey(session, rsaPublicKey, aesKey) {
 }
 
 function hsmSign(session, keys, message, mechanism) {
-  var sign = session.createSign(mechanism, keys.privateKey);
+  var sign = session.createSign(mechanism, keys);
   sign.update(message);
   return (signature = sign.final());
 }
 
 function hsmVerify(session, keys, sign, message, mechanism) {
-  var verify = session.createVerify(mechanism, keys.publicKey);
+  var verify = session.createVerify(mechanism, keys);
   verify.update(message);
   return (isVerified = verify.final(sign));
 }
 
-function hsmEncrypt(session, key, mechanism, message) {
+function hsmEncrypt(session, key, message, mechanism) {
   var cipher = session.createCipher(mechanism, key);
-  cipher.update(message);
-  return (enciphered = cipher.final());
+  var enc = cipher.update(message);
+  enc = Buffer.concat([enc, cipher.final()]);
+  return enc;
 }
 
-function hsmDecrypt(session, key, mechanism, encrypted) {
+function hsmDecrypt(session, key, encrypted, mechanism) {
   var decipher = session.createDecipher(mechanism, key);
-  decipher.update(encrypted);
-  return (deciphered = decipher.final().toString("hex"));
+  var dec = decipher.update(encrypted);
+  var msg = Buffer.concat([dec, decipher.final()]).toString();
+  return msg;
 }
 
 function hsmGetMechanism(slot) {
@@ -197,36 +254,8 @@ const session = slot.open(
 );
 session.login(HSM_LOGIN_PIN);
 
-// hsmGetMechanism(slot);
+// Write ur codes below
 
-// const labelRsa = `LabelRSA_${Date.now()}`;
-const labelAes = `LabelAES_${Date.now()}`;
-const id = genHexString(20);
-// const message =
-//   "Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa nisl malesuada lacinia integer nunc posuere ut hendrerit semper vel class aptent taciti sociosqu ad litora torquent per conubia nostra inceptos himenaeos orci varius natoque penatibus et magnis dis parturient montes nascetur ridiculus12";
-const message = "yanuarrr";
-var mechanism = {
-  name: "AES_CBC_PAD",
-  params: Buffer.from([
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00,
-  ]),
-};
-
-const aesKey = hsmCreateAesKey(session, labelAes, id, 16);
-// const rsaKey = hsmCreateRsaKey(session, labelRsa, id);
-// const sign = hsmSign(session, rsaKey, message, mechanism);
-// const verify = hsmVerify(session, rsaKey, sign, message, mechanism);
-const encrypt = hsmEncrypt(session, aesKey, mechanism, message);
-const decrypt = hsmDecrypt(session, aesKey, mechanism, encrypt);
-
-console.log(encrypt.toString("hex"));
-console.log(hexToAsc(decrypt));
-
-// console.log("Sign: \n" + sign.toString("hex"));
-// console.log("Verify: " + verify);
-
-session.destroy(aesKey);
 session.logout();
 session.close();
 mod.finalize();

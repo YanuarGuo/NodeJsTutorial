@@ -1,6 +1,19 @@
 {
   "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^5.1.0",
     "graphene-pk11": "^2.3.6",
+    "mongoose": "^8.18.0",
+    "morgan": "^1.10.1",
     "pkcs11js": "^2.1.6"
-  }
+  },
+  "name": "lesson-10---pkcs11js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
 }
