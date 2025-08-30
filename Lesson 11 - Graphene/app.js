@@ -1,9 +1,4 @@
-const fs = require("fs");
-const forge = require("node-forge");
 const graphene = require("graphene-pk11");
-const pkcs11 = require("pkcs11js");
-const { token } = require("morgan");
-const { sign, verify } = require("crypto");
 
 const HSM_PKCS11_LIB_FILE =
   "C:\\Program Files\\SafeNet\\Protect Toolkit C SDK\\bin\\sw\\cryptoki.dll";
@@ -12,6 +7,10 @@ const HSM_LOGIN_PIN = "147258";
 
 const UNSAFE_USE_LOCAL_OAEP = false;
 const USE_SAFENET = false;
+
+// NOTE: USE x64 LIBRARY
+const mod = graphene.Module.load(HSM_PKCS11_LIB_FILE, HSM_PKCS11_LIB_NAME);
+mod.initialize();
 
 function hsmCreateAesKey(session, label, id, valueLen) {
   return session.generateKey(graphene.KeyGenMechanism.AES, {
@@ -240,8 +239,6 @@ function hexToAsc(hexString) {
 }
 
 // Initialize
-const mod = graphene.Module.load(HSM_PKCS11_LIB_FILE, HSM_PKCS11_LIB_NAME);
-mod.initialize();
 const slot = mod.getSlots(0);
 
 if (!(slot.flags & graphene.SlotFlag.TOKEN_PRESENT)) {
